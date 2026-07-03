@@ -5,6 +5,7 @@ import joblib
 import json
 import os
 import plotly.graph_objects as go
+import random
 
 BASE = os.path.dirname(__file__)
 
@@ -17,21 +18,16 @@ def load_meta():
     with open(os.path.join(BASE, "model_metadata.json")) as f:
         return json.load(f)
 
-@st.cache_data
-def load_foods():
-    # Build a searchable food list from category means + presets
-    return FOOD_DB
-
 model = load_model()
 meta  = load_meta()
 
-COLS     = meta["nutrient_cols"]
-FI       = meta["feature_importances"]
-CAT_MEANS= meta["category_means"]
-METRICS  = meta["global_metrics"]
-SHORT    = meta["short_names"]
+COLS      = meta["nutrient_cols"]
+FI        = meta["feature_importances"]
+CAT_MEANS = meta["category_means"]
+METRICS   = meta["global_metrics"]
+SHORT     = meta["short_names"]
 
-# ── Food database (name → nutrients per 100g) ──────────────────────────────────
+# ── Food database ──────────────────────────────────────────────────────────────
 FOOD_DB = {
     "Grilled Chicken Breast": {
         "Data.Carbohydrate": 0.0, "Data.Fat.Total Lipid": 3.6, "Data.Protein": 31.0,
@@ -155,6 +151,20 @@ FOOD_DB = {
     },
 }
 
+def predict(nutrients):
+    X = pd.DataFrame([{c: nutrients[c] for c in COLS}])
+    return max(0.0, float(model.predict(X)[0]))
+
+def closest_category(nutrients):
+    best_cat, best_dist = None, float("inf")
+    for cat, means in CAT_MEANS.items():
+        d = sum((nutrients.get(c, 0) - means.get(c, 0)) ** 2 for c in COLS) ** 0.5
+        if d < best_dist:
+            best_dist, best_cat = d, cat
+    return best_cat
+
+FOOD_NAMES = list(FOOD_DB.keys())
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Food Calorie Predictor",
@@ -165,15 +175,14 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-  .big-number   { font-size: 5rem; font-weight: 800; color: #E8654A; line-height: 1.0; }
-  .kcal-label   { font-size: 1.1rem; color: #888; margin-top: -4px; margin-bottom: 20px; }
-  .cat-badge    { display: inline-block; background: #2D4A3E; color: #7EC8A4;
-                  border-radius: 20px; padding: 4px 14px; font-size: 0.9rem; font-weight: 600; }
-  .section-hdr  { color: #aaa; font-size: 0.72rem; text-transform: uppercase;
-                  letter-spacing: 1.5px; margin-bottom: 2px; }
-  .nutrient-row { display: flex; justify-content: space-between; padding: 4px 0;
-                  border-bottom: 1px solid #222; font-size: 0.9rem; }
-  .nutrient-val { color: #E8654A; font-weight: 600; }
+  .big-number  { font-size: 5rem; font-weight: 800; color: #E8654A; line-height: 1.0; }
+  .kcal-label  { font-size: 1.1rem; color: #888; margin-top: -4px; margin-bottom: 16px; }
+  .cat-badge   { display: inline-block; background: #2D4A3E; color: #7EC8A4;
+                 border-radius: 20px; padding: 4px 14px; font-size: 0.9rem; font-weight: 600; }
+  .section-hdr { color: #aaa; font-size: 0.72rem; text-transform: uppercase;
+                 letter-spacing: 1.5px; margin-bottom: 2px; }
+  .winner-box  { background: #2D4A3E; border-radius: 12px; padding: 14px 20px;
+                 text-align: center; color: #7EC8A4; font-size: 1.1rem; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -181,191 +190,411 @@ st.markdown("""
 title_col, credit_col = st.columns([4, 1])
 with title_col:
     st.markdown("# 🥗 How Many Calories Is That Food?")
-    st.markdown(
-        "Pick any food below and our AI will instantly tell you how many calories it has — "
-        "and explain *why* in plain English."
-    )
+    st.markdown("An AI trained on 7,400+ USDA food records predicts calories and explains *why*.")
 with credit_col:
-    st.markdown("<div style='text-align:right; padding-top:18px; color:#aaa; font-size:0.85rem;'>Project by<br><strong style='color:#fff;'>Saketh Raj Kolar</strong></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='text-align:right; padding-top:18px; color:#aaa; font-size:0.85rem;'>"
+        "Project by<br><strong style='color:#fff;'>Saketh Raj Kolar</strong></div>",
+        unsafe_allow_html=True,
+    )
 st.divider()
 
-# ── Food selector ──────────────────────────────────────────────────────────────
-food_names = list(FOOD_DB.keys())
-selected = st.selectbox(
-    "🔍 Pick a food",
-    food_names,
-    index=0,
-    help="Choose any food from the list to see its calorie prediction",
-)
+# ── Tabs ───────────────────────────────────────────────────────────────────────
+tab1, tab2, tab3, tab4 = st.tabs(["🔍 Explore", "🎯 Guess the Calories", "⚖️ Compare Foods", "🏃 Burn it Off"])
 
-nutrients = FOOD_DB[selected]
-
-# ── Prediction ─────────────────────────────────────────────────────────────────
-X_input   = pd.DataFrame([{c: nutrients[c] for c in COLS}])
-pred_kcal = max(0.0, float(model.predict(X_input)[0]))
-atwater   = (nutrients["Data.Carbohydrate"] * 4
-             + nutrients["Data.Fat.Total Lipid"] * 9
-             + nutrients["Data.Protein"] * 4)
-diff      = pred_kcal - atwater
-
-def closest_category(vals):
-    best_cat, best_dist = None, float("inf")
-    for cat, means in CAT_MEANS.items():
-        d = sum((vals.get(c, 0) - means.get(c, 0)) ** 2 for c in COLS) ** 0.5
-        if d < best_dist:
-            best_dist, best_cat = d, cat
-    return best_cat
-
-nearest_cat = closest_category(nutrients)
-
-# ── Layout: result left, breakdown right ───────────────────────────────────────
-st.markdown("")
-res_col, break_col = st.columns([1, 2], gap="large")
-
-with res_col:
-    st.markdown(
-        f'<div class="big-number">{pred_kcal:.0f}</div>'
-        f'<div class="kcal-label">calories per 100 g (about a handful)</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Fun calorie comparison
-    apple_cals = 52
-    equiv = pred_kcal / apple_cals
-    st.info(f"💡 That's roughly the same calories as **{equiv:.1f} apples** (52 cal each)")
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 1 — EXPLORE
+# ══════════════════════════════════════════════════════════════════════════════
+with tab1:
+    selected = st.selectbox("🔍 Pick a food", FOOD_NAMES, key="explore_select")
+    nutrients = FOOD_DB[selected]
+    pred_kcal = predict(nutrients)
+    atwater   = nutrients["Data.Carbohydrate"]*4 + nutrients["Data.Fat.Total Lipid"]*9 + nutrients["Data.Protein"]*4
+    diff      = pred_kcal - atwater
+    nearest_cat = closest_category(nutrients)
 
     st.markdown("")
-    st.markdown("### What's in it?")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("💪 Protein", f"{nutrients['Data.Protein']:.1f}g", help="Builds muscles")
-    m2.metric("⚡ Carbs",   f"{nutrients['Data.Carbohydrate']:.1f}g", help="Your body's main fuel")
-    m3.metric("🧈 Fat",     f"{nutrients['Data.Fat.Total Lipid']:.1f}g", help="Stores energy, helps absorb vitamins")
+    res_col, break_col = st.columns([1, 2], gap="large")
 
-    water_pct = nutrients["Data.Water"]
-    st.markdown(f"💧 **{water_pct:.0f}% is water** — the more water a food has, the fewer calories it packs in.")
-
-    st.markdown("")
-    st.markdown(
-        f'<div class="section-hdr">This food is most similar to</div>'
-        f'<span class="cat-badge">{nearest_cat}</span>',
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("")
-    st.markdown("### 🤖 Why does our AI predict this?")
-
-    if abs(diff) < 5:
-        diff_explain = (
-            f"The simple math formula also predicts **{atwater:.0f} cal** — "
-            f"our AI agrees! For this food, the basic formula works well."
+    with res_col:
+        st.markdown(
+            f'<div class="big-number">{pred_kcal:.0f}</div>'
+            f'<div class="kcal-label">calories per 100 g</div>',
+            unsafe_allow_html=True,
         )
-    elif diff > 0:
-        diff_explain = (
-            f"A simple math formula (just multiplying protein, carbs, fat) "
-            f"would guess **{atwater:.0f} cal**, but our AI says **{pred_kcal:.0f} cal** — "
-            f"**{diff:+.0f} higher**, because it also picks up on other nutrients "
-            f"like minerals and ash content."
+        equiv = pred_kcal / 52
+        st.info(f"💡 Same calories as **{equiv:.1f} apples**")
+
+        st.markdown("### What's in it?")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("💪 Protein", f"{nutrients['Data.Protein']:.1f}g")
+        m2.metric("⚡ Carbs",   f"{nutrients['Data.Carbohydrate']:.1f}g")
+        m3.metric("🧈 Fat",     f"{nutrients['Data.Fat.Total Lipid']:.1f}g")
+        st.markdown(f"💧 **{nutrients['Data.Water']:.0f}% is water** — more water = fewer calories")
+
+        st.markdown("")
+        st.markdown(
+            f'<div class="section-hdr">Most similar USDA category</div>'
+            f'<span class="cat-badge">{nearest_cat}</span>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("")
+        st.markdown("### 🤖 Why this prediction?")
+        if abs(diff) < 5:
+            st.markdown(f"The simple math formula also gives **{atwater:.0f} cal** — our AI agrees!")
+        elif diff < 0:
+            st.markdown(
+                f"Simple formula guesses **{atwater:.0f} cal**, but our AI says **{pred_kcal:.0f}** — "
+                f"**{abs(diff):.0f} fewer**, because it noticed the high water/fiber content."
+            )
+        else:
+            st.markdown(
+                f"Simple formula guesses **{atwater:.0f} cal**, but our AI says **{pred_kcal:.0f}** — "
+                f"**{diff:.0f} more**, because it also weighs minerals and other nutrients."
+            )
+
+    with break_col:
+        carb = nutrients["Data.Carbohydrate"]
+        fat  = nutrients["Data.Fat.Total Lipid"]
+        prot = nutrients["Data.Protein"]
+        fib  = nutrients["Data.Fiber"]
+        watr = nutrients["Data.Water"]
+        other = max(0, 100 - carb - fat - prot - fib - watr)
+
+        st.markdown("### 🥧 What is it made of?")
+        st.caption("Each slice = grams out of 100g")
+        donut = go.Figure(go.Pie(
+            labels=["Carbs", "Fat", "Protein", "Fiber", "Water", "Other"],
+            values=[carb, fat, prot, fib, watr, other],
+            hole=0.55,
+            marker_colors=["#4E91D2", "#E8654A", "#7EC8A4", "#F5C842", "#96C8D8", "#888"],
+            textinfo="label+percent",
+            hovertemplate="%{label}: %{value:.1f}g<extra></extra>",
+        ))
+        donut.update_layout(
+            margin=dict(l=10, r=10, t=10, b=10), height=270,
+            paper_bgcolor="#0E1117", font=dict(color="#CCC", size=11),
+            legend=dict(font=dict(color="#CCC", size=11)),
+        )
+        st.plotly_chart(donut, use_container_width=True)
+
+        st.markdown("### 🧠 What does the AI look at most?")
+        st.caption("Higher % = this nutrient matters more for predicting calories")
+        fi_sorted = sorted(FI.items(), key=lambda x: x[1], reverse=True)[:6]
+        labels_fi = [x[0].replace(" (g)","").replace(" (mg)","") for x, _ in fi_sorted]
+        vals_fi   = [v for _, v in fi_sorted]
+        bar = go.Figure(go.Bar(
+            x=vals_fi, y=labels_fi, orientation="h",
+            marker_color=["#E8654A" if i < 2 else "#5B8DB8" for i in range(len(labels_fi))],
+            text=[f"{v*100:.1f}%" for v in vals_fi], textposition="outside",
+        ))
+        bar.update_layout(
+            margin=dict(l=10, r=60, t=10, b=10), height=240,
+            xaxis=dict(tickformat=".0%", gridcolor="#333"),
+            yaxis=dict(autorange="reversed"),
+            plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+            font=dict(color="#CCC", size=11),
+        )
+        st.plotly_chart(bar, use_container_width=True)
+        st.caption("💡 Water is the #1 clue — watery foods are almost always low-calorie.")
+
+    st.divider()
+    with st.expander("🔬 See all nutrient numbers"):
+        st.caption("Exact values per 100g used by the AI")
+        c1, c2, c3 = st.columns(3)
+        items = [(SHORT[k].replace(" (g)"," g").replace(" (mg)"," mg"), nutrients[k]) for k in COLS]
+        third = len(items) // 3
+        for i, (label, val) in enumerate(items):
+            (c1 if i < third else c2 if i < 2*third else c3).metric(label, f"{val:.2f}")
+
+    with st.expander("📖 About this project"):
+        st.markdown(f"""
+**What is this?**
+An AI trained on **7,413 real foods** from the USDA database predicts calories more accurately
+than the traditional formula (protein×4 + fat×9 + carbs×4) by also learning from water,
+fiber, and mineral content.
+
+**How accurate?** Off by only **{METRICS['mae']} calories on average** (R²={METRICS['r2']}).
+
+**The big finding:** Water content is the #1 predictor — not fat or protein.
+Watery foods are almost always low-calorie; dry foods are almost always high-calorie.
+
+Built by **Saketh Raj Kolar** · Random Forest · 200 trees · 7,413 USDA records
+""")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 2 — GUESS THE CALORIES
+# ══════════════════════════════════════════════════════════════════════════════
+with tab2:
+    st.markdown("### 🎯 Can you guess the calories?")
+    st.markdown("A random food is chosen. Guess how many calories it has per 100g, then reveal the answer!")
+
+    if "game_food" not in st.session_state:
+        st.session_state.game_food = random.choice(FOOD_NAMES)
+        st.session_state.revealed  = False
+        st.session_state.score     = 0
+        st.session_state.rounds    = 0
+
+    food_name = st.session_state.game_food
+    game_nutrients = FOOD_DB[food_name]
+    actual_kcal = predict(game_nutrients)
+
+    col_game, col_score = st.columns([3, 1])
+
+    with col_score:
+        st.markdown("### 🏆 Score")
+        st.metric("Correct guesses", st.session_state.score)
+        st.metric("Total rounds", st.session_state.rounds)
+        if st.session_state.rounds > 0:
+            pct = int(st.session_state.score / st.session_state.rounds * 100)
+            st.metric("Accuracy", f"{pct}%")
+
+    with col_game:
+        st.markdown(f"## 🍽️ **{food_name}**")
+        st.caption("Per 100g — that's roughly a small handful")
+
+        guess = st.number_input(
+            "Your calorie guess:", min_value=0, max_value=1000, value=100, step=5,
+            key="guess_input"
+        )
+
+        c1, c2 = st.columns(2)
+        reveal_btn = c1.button("🎲 Reveal Answer", type="primary", use_container_width=True)
+        next_btn   = c2.button("⏭️ Next Food", use_container_width=True)
+
+        if reveal_btn and not st.session_state.revealed:
+            st.session_state.revealed = True
+            st.session_state.rounds  += 1
+            error = abs(guess - actual_kcal)
+            if error <= 20:
+                st.session_state.score += 1
+
+        if next_btn:
+            st.session_state.game_food = random.choice(FOOD_NAMES)
+            st.session_state.revealed  = False
+            st.rerun()
+
+        if st.session_state.revealed:
+            error = abs(guess - actual_kcal)
+            st.markdown("---")
+            res1, res2 = st.columns(2)
+            res1.markdown(
+                f'<div style="text-align:center">'
+                f'<div style="font-size:1rem;color:#aaa">Your guess</div>'
+                f'<div style="font-size:3rem;font-weight:800;color:#5B8DB8">{guess}</div>'
+                f'<div style="color:#aaa">kcal</div></div>',
+                unsafe_allow_html=True,
+            )
+            res2.markdown(
+                f'<div style="text-align:center">'
+                f'<div style="font-size:1rem;color:#aaa">AI prediction</div>'
+                f'<div style="font-size:3rem;font-weight:800;color:#E8654A">{actual_kcal:.0f}</div>'
+                f'<div style="color:#aaa">kcal</div></div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("")
+            if error <= 10:
+                st.success(f"🔥 Incredible! You were only {error:.0f} cal off — almost perfect!")
+            elif error <= 20:
+                st.success(f"✅ Great guess! Only {error:.0f} cal off. You win this round!")
+            elif error <= 50:
+                st.warning(f"👍 Not bad — you were {error:.0f} cal off. Getting warmer!")
+            elif error <= 100:
+                st.warning(f"😅 You were {error:.0f} cal off. Tricky one!")
+            else:
+                st.error(f"😲 You were {error:.0f} cal off — this food is surprising!")
+
+            st.markdown(
+                f"**Why {actual_kcal:.0f} cal?** {food_name} is "
+                f"**{game_nutrients['Data.Water']:.0f}% water**, "
+                f"has **{game_nutrients['Data.Fat.Total Lipid']:.1f}g fat** and "
+                f"**{game_nutrients['Data.Carbohydrate']:.1f}g carbs** per 100g."
+            )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — COMPARE FOODS
+# ══════════════════════════════════════════════════════════════════════════════
+with tab3:
+    st.markdown("### ⚖️ Which food has more calories?")
+    st.markdown("Pick two foods and see them go head to head.")
+
+    c1, c2 = st.columns(2)
+    food_a = c1.selectbox("🅰️ Food A", FOOD_NAMES, index=0, key="compare_a")
+    food_b = c2.selectbox("🅱️ Food B", FOOD_NAMES, index=2, key="compare_b")
+
+    nut_a = FOOD_DB[food_a]
+    nut_b = FOOD_DB[food_b]
+    kcal_a = predict(nut_a)
+    kcal_b = predict(nut_b)
+
+    st.markdown("")
+
+    # Calorie banner
+    ba, mid, bb = st.columns([2, 1, 2])
+    ba.markdown(
+        f'<div style="text-align:center;background:#1E1E2E;border-radius:12px;padding:20px">'
+        f'<div style="font-size:0.9rem;color:#aaa">{food_a}</div>'
+        f'<div style="font-size:3.5rem;font-weight:800;color:#{"E8654A" if kcal_a >= kcal_b else "5B8DB8"}">{kcal_a:.0f}</div>'
+        f'<div style="color:#aaa">kcal / 100g</div></div>',
+        unsafe_allow_html=True,
+    )
+    mid.markdown(
+        f'<div style="text-align:center;padding-top:40px;font-size:2rem;font-weight:800;color:#aaa">VS</div>',
+        unsafe_allow_html=True,
+    )
+    bb.markdown(
+        f'<div style="text-align:center;background:#1E1E2E;border-radius:12px;padding:20px">'
+        f'<div style="font-size:0.9rem;color:#aaa">{food_b}</div>'
+        f'<div style="font-size:3.5rem;font-weight:800;color:#{"E8654A" if kcal_b >= kcal_a else "5B8DB8"}">{kcal_b:.0f}</div>'
+        f'<div style="color:#aaa">kcal / 100g</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("")
+    if abs(kcal_a - kcal_b) < 5:
+        st.info("🤝 It's basically a tie! These two foods have almost the same calories.")
+    elif kcal_a > kcal_b:
+        diff_pct = (kcal_a - kcal_b) / kcal_b * 100
+        st.markdown(
+            f'<div class="winner-box">🏆 {food_a} has {kcal_a - kcal_b:.0f} more calories '
+            f'({diff_pct:.0f}% higher than {food_b})</div>',
+            unsafe_allow_html=True,
         )
     else:
-        diff_explain = (
-            f"A simple math formula (just multiplying protein, carbs, fat) "
-            f"would guess **{atwater:.0f} cal**, but our AI says **{pred_kcal:.0f} cal** — "
-            f"**{abs(diff):.0f} fewer**, because it noticed this food has "
-            f"a lot of water or fiber which dilute the calories."
+        diff_pct = (kcal_b - kcal_a) / kcal_a * 100
+        st.markdown(
+            f'<div class="winner-box">🏆 {food_b} has {kcal_b - kcal_a:.0f} more calories '
+            f'({diff_pct:.0f}% higher than {food_a})</div>',
+            unsafe_allow_html=True,
         )
-    st.markdown(diff_explain)
 
-with break_col:
-    # ── Macronutrient donut ────────────────────────────────────────────────────
-    carb = nutrients["Data.Carbohydrate"]
-    fat  = nutrients["Data.Fat.Total Lipid"]
-    prot = nutrients["Data.Protein"]
-    fib  = nutrients["Data.Fiber"]
-    watr = nutrients["Data.Water"]
-    other= max(0, 100 - carb - fat - prot - fib - watr)
+    # Side-by-side bar comparison
+    st.markdown("")
+    st.markdown("### Nutrient comparison")
+    nutrients_to_show = ["Data.Protein", "Data.Carbohydrate", "Data.Fat.Total Lipid",
+                         "Data.Fiber", "Data.Water", "Data.Sugar Total"]
+    labels_cmp = ["Protein", "Carbs", "Fat", "Fiber", "Water", "Sugar"]
+    vals_a = [nut_a[n] for n in nutrients_to_show]
+    vals_b = [nut_b[n] for n in nutrients_to_show]
 
-    st.markdown("### 🥧 What is this food made of?")
-    st.caption("Each slice shows how much of 100g is each nutrient")
-    donut = go.Figure(go.Pie(
-        labels=["Carbs", "Fat", "Protein", "Fiber", "Water", "Other"],
-        values=[carb, fat, prot, fib, watr, other],
-        hole=0.55,
-        marker_colors=["#4E91D2", "#E8654A", "#7EC8A4", "#F5C842", "#96C8D8", "#888"],
-        textinfo="label+percent",
-        hovertemplate="%{label}: %{value:.1f}g out of 100g<extra></extra>",
-    ))
-    donut.update_layout(
-        margin=dict(l=10, r=10, t=10, b=10),
-        height=280,
-        showlegend=True,
-        legend=dict(font=dict(color="#CCC", size=11)),
-        paper_bgcolor="#0E1117",
-        font=dict(color="#CCC", size=11),
-    )
-    st.plotly_chart(donut, use_container_width=True)
-
-    # ── Feature importance bar ────────────────────────────────────────────────
-    st.markdown("### 🧠 What does the AI look at most?")
-    st.caption("The AI learned these are the most important clues for predicting calories")
-    fi_sorted = sorted(FI.items(), key=lambda x: x[1], reverse=True)[:6]
-    labels_fi = [x[0].replace(" (g)", "").replace(" (mg)", "") for x, _ in fi_sorted]
-    vals_fi   = [v for _, v in fi_sorted]
-    pct_fi    = [f"{v*100:.1f}%" for v in vals_fi]
-
-    bar = go.Figure(go.Bar(
-        x=vals_fi, y=labels_fi, orientation="h",
-        marker_color=["#E8654A" if i < 2 else "#5B8DB8" for i in range(len(labels_fi))],
-        text=pct_fi, textposition="outside",
-        hovertemplate="%{y}: accounts for %{text} of the prediction<extra></extra>",
-    ))
-    bar.update_layout(
-        margin=dict(l=10, r=60, t=10, b=10),
-        height=250,
-        xaxis_title="How much this nutrient matters (0% = ignored, 100% = everything)",
-        yaxis=dict(autorange="reversed"),
+    fig_cmp = go.Figure()
+    fig_cmp.add_trace(go.Bar(name=food_a, x=labels_cmp, y=vals_a, marker_color="#E8654A"))
+    fig_cmp.add_trace(go.Bar(name=food_b, x=labels_cmp, y=vals_b, marker_color="#5B8DB8"))
+    fig_cmp.update_layout(
+        barmode="group",
+        margin=dict(l=10, r=10, t=10, b=10), height=300,
+        yaxis_title="grams per 100g",
         plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
         font=dict(color="#CCC", size=11),
-        xaxis=dict(gridcolor="#333", tickformat=".0%"),
+        legend=dict(font=dict(color="#CCC")),
+        yaxis=dict(gridcolor="#333"),
     )
-    st.plotly_chart(bar, use_container_width=True)
+    st.plotly_chart(fig_cmp, use_container_width=True)
+
+    # Plain English explanation
+    st.markdown("### 💬 Why the difference?")
+    higher_food = food_a if kcal_a >= kcal_b else food_b
+    lower_food  = food_b if kcal_a >= kcal_b else food_a
+    higher_nut  = nut_a  if kcal_a >= kcal_b else nut_b
+    lower_nut   = nut_b  if kcal_a >= kcal_b else nut_a
+
+    water_diff = lower_nut["Data.Water"] - higher_nut["Data.Water"]
+    fat_diff   = higher_nut["Data.Fat.Total Lipid"] - lower_nut["Data.Fat.Total Lipid"]
+
+    reasons = []
+    if water_diff > 10:
+        reasons.append(f"**{lower_food}** has {water_diff:.0f}% more water, which dilutes its calories")
+    if fat_diff > 5:
+        reasons.append(f"**{higher_food}** has {fat_diff:.0f}g more fat (fat = 9 cal/g, the most calorie-dense nutrient)")
+    carb_diff = higher_nut["Data.Carbohydrate"] - lower_nut["Data.Carbohydrate"]
+    if carb_diff > 10:
+        reasons.append(f"**{higher_food}** has {carb_diff:.0f}g more carbs")
+
+    if reasons:
+        for r in reasons:
+            st.markdown(f"- {r}")
+    else:
+        st.markdown("These foods have similar nutrient profiles, which is why their calorie counts are close.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — BURN IT OFF
+# ══════════════════════════════════════════════════════════════════════════════
+with tab4:
+    st.markdown("### 🏃 How long to burn it off?")
+    st.markdown("Pick a food and see how much exercise it takes to burn those calories.")
+
+    burn_food = st.selectbox("🔍 Pick a food", FOOD_NAMES, key="burn_select")
+
+    col_portion, col_weight = st.columns(2)
+    portion_g = col_portion.slider("Portion size (grams)", min_value=10, max_value=500,
+                                    value=100, step=10)
+    weight_kg = col_weight.slider("Your body weight (kg)", min_value=30, max_value=150,
+                                   value=70, step=5)
+
+    burn_nutrients = FOOD_DB[burn_food]
+    kcal_per_100g  = predict(burn_nutrients)
+    total_kcal     = kcal_per_100g * portion_g / 100
+
+    st.markdown("")
+    st.markdown(
+        f'<div class="big-number">{total_kcal:.0f}</div>'
+        f'<div class="kcal-label">calories in {portion_g}g of {burn_food}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("")
+
+    # MET values × weight × time (hours) = calories burned
+    # calories = MET × weight_kg × hours
+    activities = {
+        "🚶 Walking (casual)":        3.5,
+        "🚴 Cycling (moderate)":      8.0,
+        "🏃 Running (jogging)":       9.8,
+        "🏊 Swimming (laps)":         8.3,
+        "⚽ Playing soccer":          10.0,
+        "🧘 Yoga":                    2.5,
+        "💃 Dancing":                 5.0,
+        "🏋️ Weight training":         5.0,
+    }
+
+    st.markdown("### ⏱️ Time needed to burn it off")
+    cols = st.columns(4)
+    for i, (activity, met) in enumerate(activities.items()):
+        cal_per_min = met * weight_kg / 60
+        minutes = total_kcal / cal_per_min
+        hours   = int(minutes // 60)
+        mins    = int(minutes % 60)
+        time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins} min"
+        cols[i % 4].metric(activity, time_str)
+
+    st.markdown("")
+
+    # Bar chart of burn times
+    st.markdown("### 📊 Exercise comparison")
+    act_names = [a.split(" (")[0] for a in activities]
+    burn_mins = [total_kcal / (met * weight_kg / 60) for met in activities.values()]
+
+    fig_burn = go.Figure(go.Bar(
+        x=act_names, y=burn_mins,
+        marker_color=["#E8654A" if m > 60 else "#7EC8A4" for m in burn_mins],
+        text=[f"{int(m)} min" for m in burn_mins],
+        textposition="outside",
+        hovertemplate="%{x}: %{y:.0f} minutes<extra></extra>",
+    ))
+    fig_burn.update_layout(
+        margin=dict(l=10, r=10, t=10, b=10), height=320,
+        yaxis_title="Minutes of exercise",
+        plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+        font=dict(color="#CCC", size=11),
+        yaxis=dict(gridcolor="#333"),
+        xaxis=dict(tickangle=-20),
+    )
+    fig_burn.add_hline(y=60, line_dash="dot", line_color="#aaa",
+                        annotation_text="1 hour", annotation_position="top right")
+    st.plotly_chart(fig_burn, use_container_width=True)
+
     st.caption(
-        "💡 Surprising fact: **Water** is the #1 clue in most foods — "
-        "watery foods like broccoli are naturally low-calorie, "
-        "dry foods like almonds are high-calorie."
+        f"Burn times estimated for a {weight_kg}kg person. "
+        "Running burns calories ~3× faster than walking!"
     )
-
-# ── Nutrient detail (collapsible) ──────────────────────────────────────────────
-st.divider()
-with st.expander("🔬 See all nutrient numbers (for the curious)"):
-    st.caption("These are the exact values per 100g that the AI used to make its prediction")
-    c1, c2, c3 = st.columns(3)
-    items = [(SHORT[k].replace(" (g)", " g").replace(" (mg)", " mg"), nutrients[k])
-             for k in COLS]
-    third = len(items) // 3
-    for i, (label, val) in enumerate(items):
-        col = c1 if i < third else (c2 if i < 2 * third else c3)
-        col.metric(label, f"{val:.2f}")
-
-# ── About ──────────────────────────────────────────────────────────────────────
-with st.expander("📖 About this project"):
-    st.markdown(f"""
-**What is this?**
-This is a science project that uses AI to predict how many calories are in food.
-Instead of just multiplying protein × 4 + fat × 9 + carbs × 4 (the old way),
-our AI learned from **7,413 real foods** in the USDA database and figured out
-that water content, fiber, and other nutrients also matter a lot.
-
-**How accurate is it?**
-Our AI is off by only **{METRICS['mae']} calories on average** — that's incredibly close
-for predicting something as complex as food energy!
-
-**The big surprise we found:**
-Most people think fat and protein are the main drivers of calories.
-But our AI discovered that **water content is actually the #1 clue** —
-foods with lots of water (like vegetables) are almost always low-calorie,
-and dry foods (like nuts or chocolate) are almost always high-calorie.
-
-**Who made this?**
-Built by **Saketh Raj Kolar** as part of an 8-week research project analyzing nutrition data.
-*Model: Random Forest · 200 decision trees · R²={METRICS['r2']} accuracy*
-""")
