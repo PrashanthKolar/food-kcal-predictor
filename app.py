@@ -28,23 +28,14 @@ CAT_MEANS   = meta["category_means"]
 CATEGORIES  = meta["categories"]
 METRICS     = meta["global_metrics"]
 
-# Typical per-100g ranges for slider bounds (generous)
-RANGES = {
-    "Data.Carbohydrate":               (0.0, 100.0, 20.0),
-    "Data.Fat.Total Lipid":            (0.0, 100.0, 10.0),
-    "Data.Protein":                    (0.0,  90.0, 10.0),
-    "Data.Sugar Total":                (0.0, 100.0,  5.0),
-    "Data.Fiber":                      (0.0,  80.0,  2.0),
-    "Data.Water":                      (0.0, 100.0, 50.0),
-    "Data.Fat.Saturated Fat":          (0.0,  90.0,  3.0),
-    "Data.Fat.Monosaturated Fat":      (0.0,  80.0,  3.0),
-    "Data.Fat.Polysaturated Fat":      (0.0,  80.0,  2.0),
-    "Data.Major Minerals.Sodium":      (0.0,5000.0,100.0),
-    "Data.Major Minerals.Calcium":     (0.0,2000.0, 50.0),
-    "Data.Major Minerals.Potassium":   (0.0,2000.0,150.0),
-    "Data.Major Minerals.Phosphorus":  (0.0,2000.0,100.0),
-    "Data.Cholesterol":                (0.0,2000.0, 30.0),
-    "Data.Ash":                        (0.0,  30.0,  1.5),
+# Default values when no preset is loaded
+DEFAULTS = {
+    "Data.Carbohydrate": 0.0, "Data.Fat.Total Lipid": 0.0, "Data.Protein": 0.0,
+    "Data.Sugar Total": 0.0, "Data.Fiber": 0.0, "Data.Water": 0.0,
+    "Data.Fat.Saturated Fat": 0.0, "Data.Fat.Monosaturated Fat": 0.0,
+    "Data.Fat.Polysaturated Fat": 0.0, "Data.Major Minerals.Sodium": 0.0,
+    "Data.Major Minerals.Calcium": 0.0, "Data.Major Minerals.Potassium": 0.0,
+    "Data.Major Minerals.Phosphorus": 0.0, "Data.Cholesterol": 0.0, "Data.Ash": 0.0,
 }
 
 FOOD_PRESETS = {
@@ -147,19 +138,26 @@ with input_col:
     st.markdown("### Nutrient Inputs (per 100 g)")
 
     values = {}
-    macros  = ["Data.Carbohydrate", "Data.Fat.Total Lipid", "Data.Protein",
-                "Data.Sugar Total", "Data.Fiber", "Data.Water"]
-    fats    = ["Data.Fat.Saturated Fat", "Data.Fat.Monosaturated Fat", "Data.Fat.Polysaturated Fat"]
-    minerals= ["Data.Major Minerals.Sodium", "Data.Major Minerals.Calcium",
+    macros   = ["Data.Carbohydrate", "Data.Fat.Total Lipid", "Data.Protein",
+                 "Data.Sugar Total", "Data.Fiber", "Data.Water"]
+    fats     = ["Data.Fat.Saturated Fat", "Data.Fat.Monosaturated Fat", "Data.Fat.Polysaturated Fat"]
+    minerals = ["Data.Major Minerals.Sodium", "Data.Major Minerals.Calcium",
                 "Data.Major Minerals.Potassium", "Data.Major Minerals.Phosphorus",
                 "Data.Cholesterol", "Data.Ash"]
 
+    # Key includes preset name so switching presets resets all inputs to preset values
     def make_inputs(group):
-        for col in group:
-            lo, hi, default = RANGES[col]
-            dv = float(preset_vals[col]) if preset_vals else default
+        pairs = list(zip(group[::2], group[1::2])) if len(group) % 2 == 0 else None
+        cols_iter = group
+        left_cols = st.columns(2)
+        for i, col in enumerate(cols_iter):
+            dv = float(preset_vals[col]) if preset_vals else DEFAULTS[col]
             label = meta["short_names"][col]
-            values[col] = st.slider(label, min_value=lo, max_value=hi, value=dv, step=0.1, key=col)
+            widget_key = f"{col}__{preset}"
+            values[col] = left_cols[i % 2].number_input(
+                label, min_value=0.0, value=dv, step=0.1,
+                format="%.2f", key=widget_key
+            )
 
     with st.expander("Macronutrients", expanded=True):
         make_inputs(macros)
