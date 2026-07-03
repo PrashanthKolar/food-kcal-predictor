@@ -6,7 +6,6 @@ import json
 import os
 import plotly.graph_objects as go
 
-# ── Load model & metadata ──────────────────────────────────────────────────────
 BASE = os.path.dirname(__file__)
 
 @st.cache_resource
@@ -18,28 +17,22 @@ def load_meta():
     with open(os.path.join(BASE, "model_metadata.json")) as f:
         return json.load(f)
 
+@st.cache_data
+def load_foods():
+    # Build a searchable food list from category means + presets
+    return FOOD_DB
+
 model = load_model()
 meta  = load_meta()
 
-COLS        = meta["nutrient_cols"]
-DISP        = meta["display_names"]   # "Carbohydrate (g)", etc.
-FI          = meta["feature_importances"]
-CAT_MEANS   = meta["category_means"]
-CATEGORIES  = meta["categories"]
-METRICS     = meta["global_metrics"]
+COLS     = meta["nutrient_cols"]
+FI       = meta["feature_importances"]
+CAT_MEANS= meta["category_means"]
+METRICS  = meta["global_metrics"]
+SHORT    = meta["short_names"]
 
-# Default values when no preset is loaded
-DEFAULTS = {
-    "Data.Carbohydrate": 0.0, "Data.Fat.Total Lipid": 0.0, "Data.Protein": 0.0,
-    "Data.Sugar Total": 0.0, "Data.Fiber": 0.0, "Data.Water": 0.0,
-    "Data.Fat.Saturated Fat": 0.0, "Data.Fat.Monosaturated Fat": 0.0,
-    "Data.Fat.Polysaturated Fat": 0.0, "Data.Major Minerals.Sodium": 0.0,
-    "Data.Major Minerals.Calcium": 0.0, "Data.Major Minerals.Potassium": 0.0,
-    "Data.Major Minerals.Phosphorus": 0.0, "Data.Cholesterol": 0.0, "Data.Ash": 0.0,
-}
-
-FOOD_PRESETS = {
-    "— choose a preset —": None,
+# ── Food database (name → nutrients per 100g) ──────────────────────────────────
+FOOD_DB = {
     "Grilled Chicken Breast": {
         "Data.Carbohydrate": 0.0, "Data.Fat.Total Lipid": 3.6, "Data.Protein": 31.0,
         "Data.Sugar Total": 0.0, "Data.Fiber": 0.0, "Data.Water": 65.0,
@@ -80,6 +73,86 @@ FOOD_PRESETS = {
         "Data.Major Minerals.Calcium": 47.0, "Data.Major Minerals.Potassium": 316.0,
         "Data.Major Minerals.Phosphorus": 66.0, "Data.Cholesterol": 0.0, "Data.Ash": 0.9,
     },
+    "Whole Milk": {
+        "Data.Carbohydrate": 4.8, "Data.Fat.Total Lipid": 3.3, "Data.Protein": 3.2,
+        "Data.Sugar Total": 5.1, "Data.Fiber": 0.0, "Data.Water": 87.8,
+        "Data.Fat.Saturated Fat": 1.9, "Data.Fat.Monosaturated Fat": 0.8,
+        "Data.Fat.Polysaturated Fat": 0.2, "Data.Major Minerals.Sodium": 44.0,
+        "Data.Major Minerals.Calcium": 113.0, "Data.Major Minerals.Potassium": 150.0,
+        "Data.Major Minerals.Phosphorus": 84.0, "Data.Cholesterol": 10.0, "Data.Ash": 0.7,
+    },
+    "Salmon (baked)": {
+        "Data.Carbohydrate": 0.0, "Data.Fat.Total Lipid": 13.4, "Data.Protein": 25.4,
+        "Data.Sugar Total": 0.0, "Data.Fiber": 0.0, "Data.Water": 59.4,
+        "Data.Fat.Saturated Fat": 2.0, "Data.Fat.Monosaturated Fat": 4.7,
+        "Data.Fat.Polysaturated Fat": 5.2, "Data.Major Minerals.Sodium": 75.0,
+        "Data.Major Minerals.Calcium": 15.0, "Data.Major Minerals.Potassium": 490.0,
+        "Data.Major Minerals.Phosphorus": 371.0, "Data.Cholesterol": 85.0, "Data.Ash": 1.5,
+    },
+    "Banana": {
+        "Data.Carbohydrate": 23.0, "Data.Fat.Total Lipid": 0.3, "Data.Protein": 1.1,
+        "Data.Sugar Total": 12.2, "Data.Fiber": 2.6, "Data.Water": 74.9,
+        "Data.Fat.Saturated Fat": 0.11, "Data.Fat.Monosaturated Fat": 0.03,
+        "Data.Fat.Polysaturated Fat": 0.07, "Data.Major Minerals.Sodium": 1.0,
+        "Data.Major Minerals.Calcium": 5.0, "Data.Major Minerals.Potassium": 358.0,
+        "Data.Major Minerals.Phosphorus": 22.0, "Data.Cholesterol": 0.0, "Data.Ash": 0.8,
+    },
+    "White Bread": {
+        "Data.Carbohydrate": 49.0, "Data.Fat.Total Lipid": 3.2, "Data.Protein": 8.9,
+        "Data.Sugar Total": 5.0, "Data.Fiber": 2.7, "Data.Water": 36.0,
+        "Data.Fat.Saturated Fat": 0.7, "Data.Fat.Monosaturated Fat": 0.6,
+        "Data.Fat.Polysaturated Fat": 1.5, "Data.Major Minerals.Sodium": 490.0,
+        "Data.Major Minerals.Calcium": 144.0, "Data.Major Minerals.Potassium": 115.0,
+        "Data.Major Minerals.Phosphorus": 96.0, "Data.Cholesterol": 0.0, "Data.Ash": 1.6,
+    },
+    "Avocado": {
+        "Data.Carbohydrate": 8.5, "Data.Fat.Total Lipid": 14.7, "Data.Protein": 2.0,
+        "Data.Sugar Total": 0.7, "Data.Fiber": 6.7, "Data.Water": 73.2,
+        "Data.Fat.Saturated Fat": 2.1, "Data.Fat.Monosaturated Fat": 9.8,
+        "Data.Fat.Polysaturated Fat": 1.8, "Data.Major Minerals.Sodium": 7.0,
+        "Data.Major Minerals.Calcium": 12.0, "Data.Major Minerals.Potassium": 485.0,
+        "Data.Major Minerals.Phosphorus": 52.0, "Data.Cholesterol": 0.0, "Data.Ash": 1.6,
+    },
+    "Egg (boiled)": {
+        "Data.Carbohydrate": 1.1, "Data.Fat.Total Lipid": 10.6, "Data.Protein": 13.0,
+        "Data.Sugar Total": 1.1, "Data.Fiber": 0.0, "Data.Water": 74.6,
+        "Data.Fat.Saturated Fat": 3.3, "Data.Fat.Monosaturated Fat": 4.1,
+        "Data.Fat.Polysaturated Fat": 1.4, "Data.Major Minerals.Sodium": 124.0,
+        "Data.Major Minerals.Calcium": 50.0, "Data.Major Minerals.Potassium": 126.0,
+        "Data.Major Minerals.Phosphorus": 172.0, "Data.Cholesterol": 373.0, "Data.Ash": 1.0,
+    },
+    "Dark Chocolate (70%)": {
+        "Data.Carbohydrate": 45.9, "Data.Fat.Total Lipid": 42.6, "Data.Protein": 7.8,
+        "Data.Sugar Total": 24.0, "Data.Fiber": 10.9, "Data.Water": 1.3,
+        "Data.Fat.Saturated Fat": 24.5, "Data.Fat.Monosaturated Fat": 12.8,
+        "Data.Fat.Polysaturated Fat": 1.3, "Data.Major Minerals.Sodium": 20.0,
+        "Data.Major Minerals.Calcium": 73.0, "Data.Major Minerals.Potassium": 715.0,
+        "Data.Major Minerals.Phosphorus": 308.0, "Data.Cholesterol": 3.0, "Data.Ash": 2.3,
+    },
+    "Apple": {
+        "Data.Carbohydrate": 13.8, "Data.Fat.Total Lipid": 0.2, "Data.Protein": 0.3,
+        "Data.Sugar Total": 10.4, "Data.Fiber": 2.4, "Data.Water": 85.6,
+        "Data.Fat.Saturated Fat": 0.03, "Data.Fat.Monosaturated Fat": 0.01,
+        "Data.Fat.Polysaturated Fat": 0.05, "Data.Major Minerals.Sodium": 1.0,
+        "Data.Major Minerals.Calcium": 6.0, "Data.Major Minerals.Potassium": 107.0,
+        "Data.Major Minerals.Phosphorus": 11.0, "Data.Cholesterol": 0.0, "Data.Ash": 0.2,
+    },
+    "Butter": {
+        "Data.Carbohydrate": 0.1, "Data.Fat.Total Lipid": 81.1, "Data.Protein": 0.9,
+        "Data.Sugar Total": 0.1, "Data.Fiber": 0.0, "Data.Water": 17.4,
+        "Data.Fat.Saturated Fat": 51.4, "Data.Fat.Monosaturated Fat": 21.0,
+        "Data.Fat.Polysaturated Fat": 3.0, "Data.Major Minerals.Sodium": 576.0,
+        "Data.Major Minerals.Calcium": 24.0, "Data.Major Minerals.Potassium": 24.0,
+        "Data.Major Minerals.Phosphorus": 24.0, "Data.Cholesterol": 215.0, "Data.Ash": 2.1,
+    },
+    "Almonds": {
+        "Data.Carbohydrate": 21.7, "Data.Fat.Total Lipid": 49.4, "Data.Protein": 21.2,
+        "Data.Sugar Total": 3.9, "Data.Fiber": 12.5, "Data.Water": 4.4,
+        "Data.Fat.Saturated Fat": 3.7, "Data.Fat.Monosaturated Fat": 31.6,
+        "Data.Fat.Polysaturated Fat": 12.1, "Data.Major Minerals.Sodium": 1.0,
+        "Data.Major Minerals.Calcium": 264.0, "Data.Major Minerals.Potassium": 705.0,
+        "Data.Major Minerals.Phosphorus": 484.0, "Data.Cholesterol": 0.0, "Data.Ash": 3.0,
+    },
 }
 
 # ── Page config ────────────────────────────────────────────────────────────────
@@ -87,179 +160,208 @@ st.set_page_config(
     page_title="Food Calorie Predictor",
     page_icon="🥗",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown("""
 <style>
-  .big-number { font-size: 4rem; font-weight: 800; color: #E8654A; line-height: 1.1; }
-  .kcal-label { font-size: 1.1rem; color: #888; margin-top: -6px; }
-  .metric-box { background: #1E1E2E; border-radius: 12px; padding: 18px 24px; text-align: center; }
-  .cat-badge  { display: inline-block; background: #2D4A3E; color: #7EC8A4;
-                border-radius: 20px; padding: 4px 14px; font-size: 0.85rem; font-weight: 600; }
-  .section-header { color: #aaa; font-size: 0.75rem; text-transform: uppercase;
-                    letter-spacing: 1.5px; margin-bottom: 4px; }
+  .big-number   { font-size: 5rem; font-weight: 800; color: #E8654A; line-height: 1.0; }
+  .kcal-label   { font-size: 1.1rem; color: #888; margin-top: -4px; margin-bottom: 20px; }
+  .cat-badge    { display: inline-block; background: #2D4A3E; color: #7EC8A4;
+                  border-radius: 20px; padding: 4px 14px; font-size: 0.9rem; font-weight: 600; }
+  .section-hdr  { color: #aaa; font-size: 0.72rem; text-transform: uppercase;
+                  letter-spacing: 1.5px; margin-bottom: 2px; }
+  .nutrient-row { display: flex; justify-content: space-between; padding: 4px 0;
+                  border-bottom: 1px solid #222; font-size: 0.9rem; }
+  .nutrient-val { color: #E8654A; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## 🥗 Food Calorie Predictor")
-    st.caption(
-        "Enter the nutrient profile of any food (per 100 g) and get an instant "
-        "kilocalorie prediction from a Random Forest model trained on 7,400+ USDA foods."
-    )
-    st.divider()
-
-    preset = st.selectbox("Load a food preset", list(FOOD_PRESETS.keys()))
-    preset_vals = FOOD_PRESETS[preset]
-
-    st.divider()
-    st.markdown("**Model stats**")
-    col1, col2 = st.columns(2)
-    col1.metric("R²", f"{METRICS['r2']:.4f}")
-    col2.metric("MAE", f"{METRICS['mae']} kcal")
-    st.caption(f"Trained on {meta['n_total']:,} USDA food records · Random Forest (200 trees)")
-    st.divider()
-    st.caption(
-        "Built by Saketh · Research project: *Predicting Food Kilocalories "
-        "from Nutrient Profiles Using Machine Learning*"
-    )
-
-# ── Main layout ────────────────────────────────────────────────────────────────
-st.markdown("# Predict Food Calories from Nutrients")
+# ── Header ─────────────────────────────────────────────────────────────────────
+st.markdown("# 🥗 How Many Calories Is That Food?")
 st.markdown(
-    "Enter nutrient values per 100 g of food. Values update the prediction live."
+    "Pick any food below and our AI will instantly tell you how many calories it has — "
+    "and explain *why* in plain English."
+)
+st.divider()
+
+# ── Food selector ──────────────────────────────────────────────────────────────
+food_names = list(FOOD_DB.keys())
+selected = st.selectbox(
+    "🔍 Pick a food",
+    food_names,
+    index=0,
+    help="Choose any food from the list to see its calorie prediction",
 )
 
-input_col, result_col = st.columns([3, 2], gap="large")
-
-with input_col:
-    st.markdown("### Nutrient Inputs (per 100 g)")
-
-    values = {}
-    macros   = ["Data.Carbohydrate", "Data.Fat.Total Lipid", "Data.Protein",
-                 "Data.Sugar Total", "Data.Fiber", "Data.Water"]
-    fats     = ["Data.Fat.Saturated Fat", "Data.Fat.Monosaturated Fat", "Data.Fat.Polysaturated Fat"]
-    minerals = ["Data.Major Minerals.Sodium", "Data.Major Minerals.Calcium",
-                "Data.Major Minerals.Potassium", "Data.Major Minerals.Phosphorus",
-                "Data.Cholesterol", "Data.Ash"]
-
-    # Key includes preset name so switching presets resets all inputs to preset values
-    def make_inputs(group):
-        pairs = list(zip(group[::2], group[1::2])) if len(group) % 2 == 0 else None
-        cols_iter = group
-        left_cols = st.columns(2)
-        for i, col in enumerate(cols_iter):
-            dv = float(preset_vals[col]) if preset_vals else DEFAULTS[col]
-            label = meta["short_names"][col]
-            widget_key = f"{col}__{preset}"
-            values[col] = left_cols[i % 2].number_input(
-                label, min_value=0.0, value=dv, step=0.1,
-                format="%.2f", key=widget_key
-            )
-
-    with st.expander("Macronutrients", expanded=True):
-        make_inputs(macros)
-
-    with st.expander("Fat Breakdown", expanded=False):
-        make_inputs(fats)
-
-    with st.expander("Minerals & Other", expanded=False):
-        make_inputs(minerals)
+nutrients = FOOD_DB[selected]
 
 # ── Prediction ─────────────────────────────────────────────────────────────────
-X_input = pd.DataFrame([{c: values[c] for c in COLS}])
-pred_kcal = float(model.predict(X_input)[0])
-pred_kcal = max(0.0, pred_kcal)
+X_input   = pd.DataFrame([{c: nutrients[c] for c in COLS}])
+pred_kcal = max(0.0, float(model.predict(X_input)[0]))
+atwater   = (nutrients["Data.Carbohydrate"] * 4
+             + nutrients["Data.Fat.Total Lipid"] * 9
+             + nutrients["Data.Protein"] * 4)
+diff      = pred_kcal - atwater
 
-# Closest category by Euclidean distance (normalised)
 def closest_category(vals):
-    # Normalize by max range
-    ranges_arr = np.array([RANGES[c][1] - RANGES[c][0] for c in COLS])
-    ranges_arr[ranges_arr == 0] = 1
-    v = np.array([vals[c] for c in COLS]) / ranges_arr
     best_cat, best_dist = None, float("inf")
     for cat, means in CAT_MEANS.items():
-        m = np.array([means.get(c, 0) for c in COLS]) / ranges_arr
-        d = np.linalg.norm(v - m)
+        d = sum((vals.get(c, 0) - means.get(c, 0)) ** 2 for c in COLS) ** 0.5
         if d < best_dist:
             best_dist, best_cat = d, cat
     return best_cat
 
-nearest_cat = closest_category(values)
+nearest_cat = closest_category(nutrients)
 
-with result_col:
-    st.markdown("### Predicted Kilocalories")
+# ── Layout: result left, breakdown right ───────────────────────────────────────
+st.markdown("")
+res_col, break_col = st.columns([1, 2], gap="large")
+
+with res_col:
     st.markdown(
         f'<div class="big-number">{pred_kcal:.0f}</div>'
-        f'<div class="kcal-label">kcal per 100 g</div>',
+        f'<div class="kcal-label">calories per 100 g (about a handful)</div>',
         unsafe_allow_html=True,
     )
 
+    # Fun calorie comparison
+    apple_cals = 52
+    equiv = pred_kcal / apple_cals
+    st.info(f"💡 That's roughly the same calories as **{equiv:.1f} apples** (52 cal each)")
+
+    st.markdown("")
+    st.markdown("### What's in it?")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("💪 Protein", f"{nutrients['Data.Protein']:.1f}g", help="Builds muscles")
+    m2.metric("⚡ Carbs",   f"{nutrients['Data.Carbohydrate']:.1f}g", help="Your body's main fuel")
+    m3.metric("🧈 Fat",     f"{nutrients['Data.Fat.Total Lipid']:.1f}g", help="Stores energy, helps absorb vitamins")
+
+    water_pct = nutrients["Data.Water"]
+    st.markdown(f"💧 **{water_pct:.0f}% is water** — the more water a food has, the fewer calories it packs in.")
+
     st.markdown("")
     st.markdown(
-        f'<span class="section-header">Closest food category</span><br>'
+        f'<div class="section-hdr">This food is most similar to</div>'
         f'<span class="cat-badge">{nearest_cat}</span>',
         unsafe_allow_html=True,
     )
 
     st.markdown("")
-    st.markdown("**Atwater comparison**")
-    atwater = values["Data.Carbohydrate"] * 4 + values["Data.Fat.Total Lipid"] * 9 + values["Data.Protein"] * 4
-    diff = pred_kcal - atwater
-    st.markdown(
-        f"Atwater formula estimate: **{atwater:.0f} kcal**  \n"
-        f"ML model difference: **{diff:+.0f} kcal** "
-        f"({'higher' if diff > 0 else 'lower'} than Atwater)"
-    )
+    st.markdown("### 🤖 Why does our AI predict this?")
 
-    st.divider()
+    if abs(diff) < 5:
+        diff_explain = (
+            f"The simple math formula also predicts **{atwater:.0f} cal** — "
+            f"our AI agrees! For this food, the basic formula works well."
+        )
+    elif diff > 0:
+        diff_explain = (
+            f"A simple math formula (just multiplying protein, carbs, fat) "
+            f"would guess **{atwater:.0f} cal**, but our AI says **{pred_kcal:.0f} cal** — "
+            f"**{diff:+.0f} higher**, because it also picks up on other nutrients "
+            f"like minerals and ash content."
+        )
+    else:
+        diff_explain = (
+            f"A simple math formula (just multiplying protein, carbs, fat) "
+            f"would guess **{atwater:.0f} cal**, but our AI says **{pred_kcal:.0f} cal** — "
+            f"**{abs(diff):.0f} fewer**, because it noticed this food has "
+            f"a lot of water or fiber which dilute the calories."
+        )
+    st.markdown(diff_explain)
 
-    # Top feature importances bar chart
-    st.markdown("**What drives calorie prediction?**")
-    fi_sorted = sorted(FI.items(), key=lambda x: x[1], reverse=True)[:8]
-    labels = [x[0].replace(" (g)", "").replace(" (mg)", "") for x, _ in fi_sorted]
-    vals_fi = [v for _, v in fi_sorted]
+with break_col:
+    # ── Macronutrient donut ────────────────────────────────────────────────────
+    carb = nutrients["Data.Carbohydrate"]
+    fat  = nutrients["Data.Fat.Total Lipid"]
+    prot = nutrients["Data.Protein"]
+    fib  = nutrients["Data.Fiber"]
+    watr = nutrients["Data.Water"]
+    other= max(0, 100 - carb - fat - prot - fib - watr)
 
-    fig = go.Figure(go.Bar(
-        x=vals_fi,
-        y=labels,
-        orientation="h",
-        marker_color=["#E8654A" if i < 3 else "#5B8DB8" for i in range(len(labels))],
-        text=[f"{v:.3f}" for v in vals_fi],
-        textposition="outside",
+    st.markdown("### 🥧 What is this food made of?")
+    st.caption("Each slice shows how much of 100g is each nutrient")
+    donut = go.Figure(go.Pie(
+        labels=["Carbs", "Fat", "Protein", "Fiber", "Water", "Other"],
+        values=[carb, fat, prot, fib, watr, other],
+        hole=0.55,
+        marker_colors=["#4E91D2", "#E8654A", "#7EC8A4", "#F5C842", "#96C8D8", "#888"],
+        textinfo="label+percent",
+        hovertemplate="%{label}: %{value:.1f}g out of 100g<extra></extra>",
     ))
-    fig.update_layout(
-        margin=dict(l=10, r=40, t=10, b=10),
+    donut.update_layout(
+        margin=dict(l=10, r=10, t=10, b=10),
         height=280,
-        xaxis_title="Feature Importance",
-        yaxis=dict(autorange="reversed"),
-        plot_bgcolor="#0E1117",
+        showlegend=True,
+        legend=dict(font=dict(color="#CCC", size=11)),
         paper_bgcolor="#0E1117",
         font=dict(color="#CCC", size=11),
-        xaxis=dict(gridcolor="#333"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(donut, use_container_width=True)
 
-# ── Research context ───────────────────────────────────────────────────────────
+    # ── Feature importance bar ────────────────────────────────────────────────
+    st.markdown("### 🧠 What does the AI look at most?")
+    st.caption("The AI learned these are the most important clues for predicting calories")
+    fi_sorted = sorted(FI.items(), key=lambda x: x[1], reverse=True)[:6]
+    labels_fi = [x[0].replace(" (g)", "").replace(" (mg)", "") for x, _ in fi_sorted]
+    vals_fi   = [v for _, v in fi_sorted]
+    pct_fi    = [f"{v*100:.1f}%" for v in vals_fi]
+
+    bar = go.Figure(go.Bar(
+        x=vals_fi, y=labels_fi, orientation="h",
+        marker_color=["#E8654A" if i < 2 else "#5B8DB8" for i in range(len(labels_fi))],
+        text=pct_fi, textposition="outside",
+        hovertemplate="%{y}: accounts for %{text} of the prediction<extra></extra>",
+    ))
+    bar.update_layout(
+        margin=dict(l=10, r=60, t=10, b=10),
+        height=250,
+        xaxis_title="How much this nutrient matters (0% = ignored, 100% = everything)",
+        yaxis=dict(autorange="reversed"),
+        plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+        font=dict(color="#CCC", size=11),
+        xaxis=dict(gridcolor="#333", tickformat=".0%"),
+    )
+    st.plotly_chart(bar, use_container_width=True)
+    st.caption(
+        "💡 Surprising fact: **Water** is the #1 clue in most foods — "
+        "watery foods like broccoli are naturally low-calorie, "
+        "dry foods like almonds are high-calorie."
+    )
+
+# ── Nutrient detail (collapsible) ──────────────────────────────────────────────
 st.divider()
-with st.expander("About this project"):
-    st.markdown("""
-**Research:** *Predicting Food Kilocalories from Nutrient Profiles Using Machine Learning*
+with st.expander("🔬 See all nutrient numbers (for the curious)"):
+    st.caption("These are the exact values per 100g that the AI used to make its prediction")
+    c1, c2, c3 = st.columns(3)
+    items = [(SHORT[k].replace(" (g)", " g").replace(" (mg)", " mg"), nutrients[k])
+             for k in COLS]
+    third = len(items) // 3
+    for i, (label, val) in enumerate(items):
+        col = c1 if i < third else (c2 if i < 2 * third else c3)
+        col.metric(label, f"{val:.2f}")
 
-This app is the live demonstration of research analyzing **7,413 USDA food records** across
-**48 nutrient attributes**. The core finding: the traditional Atwater factors (carbs=4, fat=9,
-protein=4 kcal/g) are a good approximation, but **water content and fiber** are consistently
-among the top predictors in a Random Forest model — not just the macronutrients.
+# ── About ──────────────────────────────────────────────────────────────────────
+with st.expander("📖 About this project"):
+    st.markdown(f"""
+**What is this?**
+This is a science project that uses AI to predict how many calories are in food.
+Instead of just multiplying protein × 4 + fat × 9 + carbs × 4 (the old way),
+our AI learned from **7,413 real foods** in the USDA database and figured out
+that water content, fiber, and other nutrients also matter a lot.
 
-**Model:** Random Forest Regressor (200 trees, per-category training)
-**Global performance:** R² = {r2} · MAE = {mae} kcal · RMSE = {rmse} kcal
-**Dataset:** USDA National Nutrient Database via Kaggle (food1.csv, 7,413 rows × 48 columns)
+**How accurate is it?**
+Our AI is off by only **{METRICS['mae']} calories on average** — that's incredibly close
+for predicting something as complex as food energy!
 
-**Key findings:**
-- Water is the #1 predictor in 10 of 15 food categories
-- Total Fat dominates in meat, dairy, and candy categories
-- Fiber is the top predictor for cereals (importance = 0.582)
-- The ML model outperforms Atwater estimates by ~5 kcal MAE
-""".format(**METRICS))
+**The big surprise we found:**
+Most people think fat and protein are the main drivers of calories.
+But our AI discovered that **water content is actually the #1 clue** —
+foods with lots of water (like vegetables) are almost always low-calorie,
+and dry foods (like nuts or chocolate) are almost always high-calorie.
+
+**Who made this?**
+Built by Saketh & Esha as part of an 8-week research project analyzing nutrition data.
+*Model: Random Forest · 200 decision trees · R²={METRICS['r2']} accuracy*
+""")
