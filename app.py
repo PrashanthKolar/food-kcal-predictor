@@ -178,11 +178,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Header ─────────────────────────────────────────────────────────────────────
-st.markdown("# 🥗 How Many Calories Is That Food?")
-st.markdown(
-    "Pick any food below and our AI will instantly tell you how many calories it has — "
-    "and explain *why* in plain English."
-)
+title_col, credit_col = st.columns([4, 1])
+with title_col:
+    st.markdown("# 🥗 How Many Calories Is That Food?")
+    st.markdown(
+        "Pick any food below and our AI will instantly tell you how many calories it has — "
+        "and explain *why* in plain English."
+    )
+with credit_col:
+    st.markdown("<div style='text-align:right; padding-top:18px; color:#aaa; font-size:0.85rem;'>Project by<br><strong style='color:#fff;'>Saketh Raj Kolar</strong></div>", unsafe_allow_html=True)
 st.divider()
 
 # ── Food selector ──────────────────────────────────────────────────────────────
@@ -362,6 +366,6 @@ foods with lots of water (like vegetables) are almost always low-calorie,
 and dry foods (like nuts or chocolate) are almost always high-calorie.
 
 **Who made this?**
-Built by Saketh & Esha as part of an 8-week research project analyzing nutrition data.
+Built by **Saketh Raj Kolar** as part of an 8-week research project analyzing nutrition data.
 *Model: Random Forest · 200 decision trees · R²={METRICS['r2']} accuracy*
 """)
